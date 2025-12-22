@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
 
 // ----------------------------------------------------------------------
-// 타입 정의 (기존과 동일)
+// 타입 정의
 // ----------------------------------------------------------------------
 
 interface SeriesPoint {
@@ -21,6 +21,7 @@ interface DailyPoint {
 interface ChannelData {
   channelId: string;
   channelTitle: string;
+  channelUsername?: string; // [추가] 텔레그램 유저네임 필드
   score: number;
   mentionCount: number;
   profileImageUrl?: string;
@@ -68,15 +69,12 @@ const CustomTreemapContent = (props: any) => {
   // ----------------------------------------------------------------------
   // [Render Logic] 크기에 따른 정보 노출 단계 (Threshold 상향 조정)
   // ----------------------------------------------------------------------
-  // [수정] 모바일 가독성을 위해 기준을 더 엄격하게 변경
 
   // 1. Large: 모든 정보 표시 (Sparkline + Total Score)
-  // 기존: > 140x120 -> 변경: > 200x160 (확실히 클 때만 그래프 표시)
-  const isLarge = width > 140 && height > 140;
+  const isLarge = width > 200 && height > 160;
 
   // 2. Medium: Total Score 표시 (Sparkline 제외)
-  // 기존: > 90x80 -> 변경: > 120x100 (이름과 점수가 겹치지 않을 최소 공간 확보)
-  const isMedium = !isLarge && width > 100 && height > 100;
+  const isMedium = !isLarge && width > 120 && height > 100;
 
   // 3. Small: 아이콘 + %만 표시 (나머지 모든 경우)
   const isSmall = !isLarge && !isMedium;
@@ -230,8 +228,6 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
-// ... (이하 CustomTooltip 및 StorytellerClient 컴포넌트는 기존과 동일하게 유지)
-
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -282,13 +278,16 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+// ----------------------------------------------------------------------
+// 메인 클라이언트 컴포넌트
+// ----------------------------------------------------------------------
 export default function StorytellerClient({
   apiDataMap: initialApiDataMap,
   notionTasks,
   availableGroupIds,
   projectNames,
 }: {
-  apiDataMap: Record<string, any>;
+  apiDataMap: Record<string, any>; // 이제 { "7":..., "30":... } 구조를 가짐
   notionTasks: NotionTask[];
   availableGroupIds: string[];
   projectNames: Record<string, string>;
@@ -296,9 +295,9 @@ export default function StorytellerClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryGroupId = searchParams.get("groupId");
-
   const todayStr = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
 
+  // [State] UI 상태
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedGroupId, setSelectedGroupId] = useState<string>(
     queryGroupId && availableGroupIds.includes(queryGroupId)
@@ -306,9 +305,13 @@ export default function StorytellerClient({
       : availableGroupIds[0] || "63"
   );
 
+  // [New State] 기간 선택 (Default: 30)
+  const [lookback, setLookback] = useState<number>(30);
+
   const [currentDataMap, setCurrentDataMap] = useState(initialApiDataMap);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  // Grouping Logic (Active / Finished)
   const { activeIds, finishedIds } = useMemo(() => {
     const activeStatuses = [
       "진행중",
@@ -318,27 +321,19 @@ export default function StorytellerClient({
       "Running",
       "Active",
     ];
-
     const active: string[] = [];
     const finished: string[] = [];
-
     availableGroupIds.forEach((id) => {
       const task = notionTasks.find((t) => t.groupId === id);
-      if (task && activeStatuses.includes(task.status)) {
-        active.push(id);
-      } else {
-        finished.push(id);
-      }
+      if (task && activeStatuses.includes(task.status)) active.push(id);
+      else finished.push(id);
     });
-
     return { activeIds: active, finishedIds: finished };
   }, [availableGroupIds, notionTasks]);
 
   useEffect(() => {
     if (queryGroupId && availableGroupIds.includes(queryGroupId)) {
-      if (selectedGroupId !== queryGroupId) {
-        setSelectedGroupId(queryGroupId);
-      }
+      if (selectedGroupId !== queryGroupId) setSelectedGroupId(queryGroupId);
     }
   }, [queryGroupId, availableGroupIds, selectedGroupId]);
 
@@ -347,21 +342,21 @@ export default function StorytellerClient({
     router.push(`?groupId=${id}`, { scroll: false });
   };
 
+  // Fetch History on Date Change
   useEffect(() => {
     async function fetchHistory() {
       if (selectedDate === todayStr) {
         setCurrentDataMap(initialApiDataMap);
         return;
       }
-
       setIsLoadingHistory(true);
       try {
         const res = await fetch(
           `/api/history?groupId=${selectedGroupId}&date=${selectedDate}`
         );
-
         if (res.ok) {
           const historyData = await res.json();
+          // historyData will be { "7": ..., "30": ... } for new data
           setCurrentDataMap((prev) => ({
             ...prev,
             [selectedGroupId]: historyData,
@@ -377,18 +372,34 @@ export default function StorytellerClient({
         setIsLoadingHistory(false);
       }
     }
-
     fetchHistory();
   }, [selectedDate, selectedGroupId, todayStr, initialApiDataMap]);
 
-  const currentApiData = currentDataMap[selectedGroupId];
+  // [Data Selector] 선택된 Group & Lookback에 맞는 데이터 추출
+  const currentGroupAllData = currentDataMap[selectedGroupId];
 
+  const currentApiData = useMemo(() => {
+    if (!currentGroupAllData) return null;
+
+    // 1. 새로운 데이터 구조인지 확인 (키 값으로 확인)
+    if (currentGroupAllData["30"] || currentGroupAllData["7"]) {
+      return currentGroupAllData[lookback.toString()];
+    }
+
+    // 2. 구 데이터(Legacy)인 경우: 30일 데이터로 간주
+    // 사용자가 30일을 선택했을 때만 보여주고, 나머지는 null
+    if (lookback === 30) {
+      return currentGroupAllData;
+    }
+
+    return null; // 구 데이터인데 7, 14, 90을 선택한 경우 데이터 없음
+  }, [currentGroupAllData, lookback]);
+
+  // TreeMap Data Processing
   const { treeMapData, totalScore } = useMemo(() => {
     if (!currentApiData?.channels) return { treeMapData: [], totalScore: 0 };
-
     const channels: ChannelData[] = currentApiData.channels;
     const total = channels.reduce((sum, ch) => sum + ch.score, 0);
-
     const data = channels.map((ch) => {
       const rawSeries = ch.series || [];
       const dailySeries: DailyPoint[] = [];
@@ -407,11 +418,18 @@ export default function StorytellerClient({
         itemData: { ...ch, dailySeries },
       };
     });
-
     data.sort((a, b) => b.value - a.value);
     return { treeMapData: data, totalScore: total };
   }, [currentApiData]);
 
+  // Visual & Table Data
+  const treemapVisualData = useMemo(
+    () => treeMapData.slice(0, 20),
+    [treeMapData]
+  );
+  const rankingData = treeMapData;
+
+  // Schedule Logic
   const { startDate, totalDays, dateHeaders } = useMemo(() => {
     const baseDate = new Date();
     if (notionTasks.length === 0) {
@@ -419,27 +437,22 @@ export default function StorytellerClient({
       start.setDate(start.getDate() - 3);
       return { startDate: start, totalDays: 30, dateHeaders: [] };
     }
-
     const dates = notionTasks
       .map((t) => [new Date(t.dateStart || ""), new Date(t.dateEnd || "")])
       .flat()
       .filter((d) => !isNaN(d.getTime()))
       .map((d) => d.getTime());
-
     const min = dates.length ? Math.min(...dates) : baseDate.getTime();
     const max = dates.length
       ? Math.max(...dates)
       : baseDate.getTime() + 86400000 * 30;
-
     const start = new Date(min);
     start.setDate(start.getDate() - 3);
     const end = new Date(max);
     end.setDate(end.getDate() + 7);
-
     const diffDays = Math.ceil(
       (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
     );
-
     const headers = [];
     for (let i = 0; i <= diffDays; i += 7) {
       const d = new Date(start);
@@ -449,7 +462,6 @@ export default function StorytellerClient({
         left: (i / diffDays) * 100,
       });
     }
-
     return {
       startDate: start,
       totalDays: diffDays || 30,
@@ -473,6 +485,7 @@ export default function StorytellerClient({
   return (
     <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans selection:bg-indigo-100 selection:text-indigo-900">
       <main className="max-w-[1600px] mx-auto px-6 py-12">
+        {/* Header */}
         <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <h1 className="text-4xl font-extrabold tracking-tight mb-2 text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600">
@@ -482,8 +495,30 @@ export default function StorytellerClient({
               Influence Intelligence & Content Scheduling
             </p>
           </div>
-
           <div className="flex flex-col md:flex-row items-end md:items-center gap-6">
+            {/* [New] Lookback Selector */}
+            <div className="flex flex-col items-end">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                Period
+              </label>
+              <div className="flex bg-white rounded-xl p-1 shadow-sm border border-gray-200">
+                {[7, 14, 30, 90].map((days) => (
+                  <button
+                    key={days}
+                    onClick={() => setLookback(days)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      lookback === days
+                        ? "bg-gray-900 text-white shadow-md"
+                        : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    {days}d
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Machine */}
             <div className="flex flex-col items-end">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                 {selectedDate !== todayStr && (
@@ -497,14 +532,11 @@ export default function StorytellerClient({
                   value={selectedDate}
                   max={todayStr}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className={`
-                      appearance-none bg-white border rounded-xl px-4 py-2 text-sm font-bold shadow-sm outline-none transition-all duration-200
-                      ${
-                        selectedDate !== todayStr
-                          ? "border-indigo-300 ring-2 ring-indigo-100 text-indigo-700"
-                          : "border-gray-200 text-gray-700 hover:border-gray-300 focus:ring-2 focus:ring-gray-100"
-                      }
-                    `}
+                  className={`appearance-none bg-white border rounded-xl px-4 py-2 text-sm font-bold shadow-sm outline-none transition-all duration-200 ${
+                    selectedDate !== todayStr
+                      ? "border-indigo-300 ring-2 ring-indigo-100 text-indigo-700"
+                      : "border-gray-200 text-gray-700 hover:border-gray-300 focus:ring-2 focus:ring-gray-100"
+                  }`}
                 />
                 {selectedDate !== todayStr && (
                   <button
@@ -517,6 +549,7 @@ export default function StorytellerClient({
               </div>
             </div>
 
+            {/* Project Tabs */}
             <div className="flex flex-col items-end gap-3 bg-white/50 p-2 rounded-xl border border-gray-200/60 backdrop-blur-sm min-w-[300px]">
               {activeIds.length > 0 && (
                 <div className="w-full">
@@ -540,11 +573,9 @@ export default function StorytellerClient({
                   </div>
                 </div>
               )}
-
               {finishedIds.length > 0 && activeIds.length > 0 && (
                 <div className="w-full h-px bg-gray-200/50 my-0.5" />
               )}
-
               {finishedIds.length > 0 && (
                 <div className="w-full">
                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1 text-right">
@@ -571,11 +602,8 @@ export default function StorytellerClient({
           </div>
         </div>
 
-        {/* 1. Liquid Glass TreeMap (Responsive Height) */}
-        <div
-          className="rounded-[40px] p-2 shadow-inner border border-white/50 mb-12 relative overflow-hidden bg-white/30 
-                     h-[1000px] md:h-[700px]"
-        >
+        {/* 1. TreeMap */}
+        <div className="rounded-[40px] p-2 shadow-inner border border-white/50 mb-12 relative overflow-hidden bg-white/30 h-[1000px] md:h-[700px]">
           {isLoadingHistory && (
             <div className="absolute inset-0 z-50 bg-white/60 backdrop-blur-md flex flex-col items-center justify-center rounded-[32px] transition-all">
               <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
@@ -584,7 +612,6 @@ export default function StorytellerClient({
               </div>
             </div>
           )}
-
           <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none opacity-[0.15] grayscale">
             <img
               src="/logo.png"
@@ -593,12 +620,11 @@ export default function StorytellerClient({
             />
           </div>
           <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none rounded-[32px]" />
-
           <div className="w-full h-full relative z-10">
-            {treeMapData.length > 0 ? (
+            {treemapVisualData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <Treemap
-                  data={treeMapData}
+                  data={treemapVisualData}
                   dataKey="value"
                   aspectRatio={1}
                   stroke="none"
@@ -611,15 +637,132 @@ export default function StorytellerClient({
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                <p className="font-medium text-lg">No Data Available</p>
+                <p className="font-medium text-lg">
+                  No Data Available ({lookback}d)
+                </p>
                 <p className="text-sm">
                   {projectNames[selectedGroupId]} ({selectedDate})
                 </p>
+                {!currentApiData && lookback !== 30 && (
+                  <p className="text-xs text-red-400 mt-2">
+                    Old data supports only 30d view.
+                  </p>
+                )}
               </div>
             )}
           </div>
         </div>
 
+        {/* 2. Leaderboard */}
+        <div className="bg-white rounded-[32px] p-8 shadow-xl shadow-gray-200/50 border border-white mb-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+            🏆 Leaderboard
+            <span className="text-sm font-normal text-gray-400 bg-gray-50 px-2 py-1 rounded ml-2">
+              Top 50 Channels ({lookback}d)
+            </span>
+          </h2>
+          <div className="overflow-hidden border border-gray-100 rounded-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+                    <th className="px-6 py-4 font-semibold w-16 text-center">
+                      #
+                    </th>
+                    <th className="px-6 py-4 font-semibold">Channel</th>
+                    <th className="px-6 py-4 font-semibold text-right">
+                      Score
+                    </th>
+                    <th className="px-6 py-4 font-semibold text-center w-24">
+                      Link
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {rankingData.length > 0 ? (
+                    rankingData.map((item, index) => {
+                      const channel = item.itemData as ChannelData;
+                      const telegramLink = channel.channelUsername
+                        ? `https://t.me/${channel.channelUsername}`
+                        : `https://t.me/${channel.channelId}`;
+                      return (
+                        <tr
+                          key={channel.channelId}
+                          className="hover:bg-gray-50/80 transition-colors group"
+                        >
+                          <td className="px-6 py-4 text-center font-bold text-gray-400 group-hover:text-indigo-500 transition-colors">
+                            {index + 1}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-4">
+                              {channel.profileImageUrl ? (
+                                <img
+                                  src={channel.profileImageUrl}
+                                  alt=""
+                                  className="w-10 h-10 rounded-full shadow-sm object-cover border border-gray-100"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold">
+                                  ?
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-900 truncate max-w-[200px] md:max-w-xs">
+                                  {channel.channelTitle}
+                                </p>
+                                <p className="text-xs text-gray-400 truncate">
+                                  {channel.channelUsername
+                                    ? `@${channel.channelUsername}`
+                                    : `@${channel.channelId}`}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="font-bold text-gray-900 bg-gray-50 px-2 py-1 rounded-lg tabular-nums">
+                              {Math.round(channel.score).toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <a
+                              href={telegramLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-400 hover:bg-sky-50 hover:text-sky-600 transition-all hover:scale-110"
+                              title="Visit Telegram Channel"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 11.944 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                              </svg>
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="px-6 py-12 text-center text-gray-400"
+                      >
+                        No ranking data available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Schedule Section */}
         <div className="bg-white rounded-[32px] p-8 shadow-xl shadow-gray-200/50 border border-white min-h-[500px]">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 flex items-center gap-3">
             🗓️ All Content Schedules
@@ -631,6 +774,7 @@ export default function StorytellerClient({
           <div className="relative border border-gray-100 bg-gray-50/50 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto custom-scrollbar">
               <div className="min-w-[1000px] p-6 pt-12 relative min-h-[400px]">
+                {/* Date Headers */}
                 <div className="absolute inset-0 pointer-events-none">
                   {dateHeaders.map((h, i) => (
                     <div
@@ -643,6 +787,7 @@ export default function StorytellerClient({
                   ))}
                 </div>
 
+                {/* Tasks Bars */}
                 <div className="space-y-4 relative z-10 mt-2">
                   {notionTasks.length > 0 ? (
                     notionTasks.map((task) => {
@@ -700,6 +845,7 @@ export default function StorytellerClient({
                   )}
                 </div>
 
+                {/* Today Marker */}
                 <div
                   className="absolute top-0 bottom-0 border-l-2 border-red-500/80 z-20 pointer-events-none"
                   style={{

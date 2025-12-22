@@ -8,6 +8,8 @@ const STORYTELLER_DB_ID = process.env.NOTION_STORYTELLER_DB_ID;
 const API_BASE_URL =
   "https://mashboard-api.despreadlabs.io/storyteller-leaderboard";
 
+const LOOKBACK_DAYS = [7, 14, 30, 90];
+
 const headers = {
   Authorization: `Bearer ${NOTION_TOKEN}`,
   "Content-Type": "application/json",
@@ -141,16 +143,33 @@ async function fetchNotionTasksRaw() {
 }
 
 // ----------------------------------------------------------------------
-// 2. API 데이터 가져오기
+// 2. API 데이터 가져오기 (Multi-Duration 수정)
 // ----------------------------------------------------------------------
 async function fetchAllApiData(groupIds: string[]) {
   const apiDataMap: Record<string, any> = {};
+
+  // 각 그룹별로 4개의 기간 데이터를 모두 가져옵니다.
   await Promise.all(
     groupIds.map(async (id) => {
       try {
-        const url = `${API_BASE_URL}/${id}/timeseries-group?limit=20&lookbacks=30`;
-        const res = await fetch(url, { next: { revalidate: 3600 } });
-        if (res.ok) apiDataMap[id] = await res.json();
+        const groupResult: Record<string, any> = {};
+
+        await Promise.all(
+          LOOKBACK_DAYS.map(async (days) => {
+            const url = `${API_BASE_URL}/${id}/timeseries-group?limit=50&lookbacks=${days}`;
+            // 개별 실패가 전체를 막지 않도록 처리
+            try {
+              const res = await fetch(url, { next: { revalidate: 3600 } });
+              if (res.ok) {
+                groupResult[String(days)] = await res.json();
+              }
+            } catch (innerE) {
+              console.error(`Error fetching ${id} - ${days}d:`, innerE);
+            }
+          })
+        );
+
+        apiDataMap[id] = groupResult;
       } catch (e) {
         console.error(`API Fetch Error for Group ${id}:`, e);
       }

@@ -10,8 +10,11 @@ const DB_ID = process.env.NOTION_STORYTELLER_DB_ID;
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+// [New] 수집할 기간 목록 정의
+const LOOKBACK_DAYS = [7, 14, 30, 90];
+
 export async function GET(request: Request) {
-  console.log("--> [Cron] Data Source Job Started (All Projects)");
+  console.log("--> [Cron] Data Source Job Started (Multi-Duration)");
 
   // 1. 보안 체크
   const authHeader = request.headers.get("authorization");
@@ -26,16 +29,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Env missing" }, { status: 500 });
   }
 
+  // [날짜 설정] UTC 15:00 실행 시 -> 한국은 다음날 00:00
+  // new Date()는 UTC 기준이므로 '어제 날짜(마감된 날짜)'로 찍힙니다.
+  // 예: 한국 26일 00시 실행 -> 파일명: 2025-XX-25.json (25일자 마감 데이터라는 의미로 적절함)
   const today = new Date().toISOString().split("T")[0];
+
   const headers = {
     Authorization: `Bearer ${NOTION_TOKEN}`,
     "Content-Type": "application/json",
-    "Notion-Version": "2025-09-03", // 최신 버전 명시
+    "Notion-Version": "2025-09-03",
   };
 
   try {
     // ---------------------------------------------------------
-    // 1. DB 메타데이터 조회
+    // 1. DB 메타데이터 및 Notion Page 조회
     // ---------------------------------------------------------
     const dbRes = await fetch(`https://api.notion.com/v1/databases/${DB_ID}`, {
       headers,
@@ -44,66 +51,52 @@ export async function GET(request: Request) {
 
     const dbData = await dbRes.json();
     const dataSources = dbData.data_sources || [];
+    const allPages: any[] = [];
 
-    if (dataSources.length === 0) {
-      return NextResponse.json({
-        error: "No Data Sources found. (Please check connection)",
-      });
+    if (dataSources.length > 0) {
+      await Promise.all(
+        dataSources.map(async (source: any) => {
+          const queryRes = await fetch(
+            `https://api.notion.com/v1/data_sources/${source.id}/query`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({}),
+            }
+          );
+          if (queryRes.ok) {
+            const data = await queryRes.json();
+            allPages.push(...(data.results || []));
+          }
+        })
+      );
+    } else {
+      // 데이터 소스가 없는 경우 레거시 방식 조회 (필요 시)
+      const legacyRes = await fetch(
+        `https://api.notion.com/v1/databases/${DB_ID}/query`,
+        { method: "POST", headers, body: JSON.stringify({}) }
+      );
+      if (legacyRes.ok)
+        allPages.push(...((await legacyRes.json()).results || []));
     }
 
     // ---------------------------------------------------------
-    // 2. Data Source Query (필터 없이 조회)
+    // 2. 대상 프로젝트 필터링 (GroupID 존재 여부)
     // ---------------------------------------------------------
-    const allPages: any[] = [];
-
-    await Promise.all(
-      dataSources.map(async (source: any) => {
-        const queryRes = await fetch(
-          `https://api.notion.com/v1/data_sources/${source.id}/query`,
-          {
-            method: "POST",
-            headers,
-            // 필터 없이 모든 데이터를 가져옵니다.
-            body: JSON.stringify({}),
-          }
-        );
-
-        if (queryRes.ok) {
-          const data = await queryRes.json();
-          allPages.push(...(data.results || []));
-        } else {
-          console.error(
-            `Query Error for Source ${source.id}:`,
-            await queryRes.text()
-          );
-        }
-      })
-    );
-
-    console.log(`Total Pages Found (No Filter): ${allPages.length}`);
-
-    // ---------------------------------------------------------
-    // 3. 필터링 (Status 체크 제거 -> GroupID 존재 여부만 확인)
-    // ---------------------------------------------------------
-    // 기존의 "진행중" 상태 체크 로직을 삭제했습니다.
-    // 대신 API 요청에 필수적인 GroupID가 있는지만 확인하여 대상을 선정합니다.
     const targetProjects = allPages.filter((page: any) => {
       const props = page.properties;
       const groupProp =
         props["GroupID"] || props["Group ID"] || props["그룹ID"];
-
-      // GroupID가 유효한 값을 가지고 있는지 확인
       if (groupProp?.number) return true;
       if (groupProp?.rich_text?.[0]?.plain_text) return true;
       if (groupProp?.title?.[0]?.plain_text) return true;
-
       return false;
     });
 
-    console.log(`--> Target Projects (With GroupID): ${targetProjects.length}`);
+    console.log(`--> Target Projects: ${targetProjects.length}`);
 
     // ---------------------------------------------------------
-    // 4. GroupID 추출 및 저장
+    // 3. 데이터 수집 및 저장 (Multi-Duration)
     // ---------------------------------------------------------
     const results = [];
 
@@ -120,18 +113,37 @@ export async function GET(request: Request) {
 
       if (groupId) {
         try {
-          const apiUrl = `${API_BASE_URL}/${groupId}/timeseries-group?limit=20&lookbacks=30`;
-          const res = await fetch(apiUrl);
-          if (res.ok) {
-            const data = await res.json();
+          // [핵심 변경] 7, 14, 30, 90일 데이터를 병렬로 모두 가져옴
+          const collectedData: Record<string, any> = {};
+
+          await Promise.all(
+            LOOKBACK_DAYS.map(async (days) => {
+              // 50개 데이터 기준
+              const apiUrl = `${API_BASE_URL}/${groupId}/timeseries-group?limit=50&lookbacks=${days}`;
+              const res = await fetch(apiUrl);
+              if (res.ok) {
+                collectedData[String(days)] = await res.json();
+              }
+            })
+          );
+
+          // 데이터가 하나라도 수집되었다면 저장
+          if (Object.keys(collectedData).length > 0) {
             const filename = `history/${groupId}/${today}.json`;
-            const blob = await put(filename, JSON.stringify(data), {
+
+            // 하나의 JSON 파일 안에 {"7":..., "14":..., "30":..., "90":...} 형태로 저장됨
+            const blob = await put(filename, JSON.stringify(collectedData), {
               access: "public",
               contentType: "application/json",
               addRandomSuffix: false,
-              allowOverwrite: true,
+              allowOverwrite: true, // 덮어쓰기 허용
             });
-            console.log(`   Saved: ${filename}`);
+
+            console.log(
+              `   Saved: ${filename} (Keys: ${Object.keys(collectedData).join(
+                ", "
+              )})`
+            );
             results.push({ groupId, url: blob.url });
           }
         } catch (e) {
