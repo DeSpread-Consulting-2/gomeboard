@@ -25,8 +25,17 @@ const FILTER_QUERY = {
   },
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   console.log("--> [Cron] Data Snapshot Job Started (v2025-09-03)");
+
+  const authHeader = request.headers.get("authorization");
+  if (
+    process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    console.warn("🚫 Unauthorized Cron Attempt");
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
 
   if (!NOTION_TOKEN || !DB_ID) {
     console.error("Missing Notion Env Variables");
