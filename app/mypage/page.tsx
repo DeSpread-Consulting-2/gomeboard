@@ -572,7 +572,7 @@ function AccountRow({
         <div
           className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shadow-sm ${
             isConnected
-              ? "bg-white border border-gray-100"
+              ? "bg-[#F5F5F7] border border-gray-100"
               : "bg-gray-100 text-gray-400 grayscale"
           }`}
         >

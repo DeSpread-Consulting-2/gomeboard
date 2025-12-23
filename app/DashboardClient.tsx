@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 // 데이터 타입 정의
 export interface ProjectCard {
@@ -10,15 +9,17 @@ export interface ProjectCard {
   title: string;
   icon: string | null;
   team: string;
-  status: string;
+  status: string; // "진행 중" | "종료"
   progress: number;
   period: string;
   periodStart: string;
   manager: string;
   managerImage: string | null;
-  poc: string;
+  // [수정] PoC 프로필 이미지를 위한 필드 추가
+  poc: string; // Point of Contact
+  pocImage: string | null;
   workScope: string[];
-  reportStatus?: string;
+  reportStatus?: string; // "Approved" | "Pending" | "Issue" | "N/A"
   apiProjectId?: string;
 }
 
@@ -56,12 +57,7 @@ export default function DashboardClient({
     null
   );
 
-  const pathname = usePathname();
-  const getNavLinkClass = (path: string) =>
-    pathname === path
-      ? "text-black font-bold"
-      : "text-gray-500 hover:text-black transition-colors";
-
+  // 자동화 항목 그룹화
   const groupedAutomations = useMemo(() => {
     const groups: Record<string, AutomationItem[]> = {};
     automations.forEach((item) => {
@@ -72,6 +68,7 @@ export default function DashboardClient({
     return groups;
   }, [automations]);
 
+  // 프로젝트 필터링 및 정렬
   const processedProjects = useMemo(() => {
     let temp = projects.filter((p) => {
       if (filter === "all") return true;
@@ -92,75 +89,81 @@ export default function DashboardClient({
   }, [projects, filter, sortKey, sortOrder, isOverview]);
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans">
-      <main className="max-w-[1600px] mx-auto px-6 py-10">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-8 gap-6">
+    // [유지] 배경색을 흰색(bg-white)으로 통일 (layout.tsx와 일치)
+    <div className="flex-1 w-full bg-[#F5F5F7] text-[#1D1D1F] font-sans">
+      {/* 컨텐츠 래퍼 */}
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        {/* 헤더 섹션 */}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight mb-2 text-gray-900">
+            <h1
+              className="text-[#0037F0] text-4xl font-black uppercase tracking-tighter mb-2 leading-[0.9]"
+              style={{ fontFamily: "'General Sans', sans-serif" }}
+            >
               {isOverview ? "Overview" : title}
             </h1>
-            <p className="text-gray-500 text-base">
+            <p className="text-gray-500 text-sm font-medium ml-1">
               {isOverview
-                ? "주요 프로젝트 현황 및 자동화 프로세스 요약입니다."
-                : "전체 프로젝트 현황을 관리하고 모니터링하세요."}
+                ? "주요 프로젝트 및 자동화 프로세스 요약"
+                : "전체 프로젝트 현황 모니터링"}
             </p>
           </div>
 
           {!isOverview && (
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* 1. 정렬 버튼 */}
-              <div className="flex items-center bg-white rounded-lg p-1 shadow-sm border border-gray-200 h-9">
-                <span className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Sort by
+            <div className="flex flex-wrap items-center gap-3">
+              {/* [수정] Sort Control: 오름차순/내림차순 표시 추가 */}
+              <div className="flex items-center bg-white rounded-lg px-3 py-1.5 border border-gray-200 shadow-sm">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-3">
+                  Sort
                 </span>
-                <div className="w-px h-3 bg-gray-200 mx-1"></div>
-                {[
-                  { key: "team", label: "팀" },
-                  { key: "periodStart", label: "계약일" },
-                  { key: "manager", label: "담당자" },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    // [수정됨] 클릭 시 현재 키와 같으면 순서 반전(Toggle), 다르면 오름차순 초기화
-                    onClick={() => {
-                      if (sortKey === opt.key) {
-                        setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-                      } else {
-                        setSortKey(opt.key as SortKey);
-                        setSortOrder("asc");
-                      }
-                    }}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
-                      sortKey === opt.key
-                        ? "bg-gray-100 text-black font-semibold"
-                        : "text-gray-500 hover:text-gray-800"
-                    }`}
-                  >
-                    {opt.label}
-                    {/* 화살표 아이콘도 상태에 따라 바뀌도록 표시 */}
-                    {sortKey === opt.key && (
-                      <span className="text-[10px] text-gray-400">
-                        {sortOrder === "asc" ? "▲" : "▼"}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                <div className="flex gap-3">
+                  {[
+                    { key: "team", label: "Team" },
+                    { key: "periodStart", label: "Date" },
+                    { key: "manager", label: "Manager" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        if (sortKey === opt.key) {
+                          setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                        } else {
+                          setSortKey(opt.key as SortKey);
+                          setSortOrder("asc");
+                        }
+                      }}
+                      className={`text-xs transition-colors flex items-center gap-1 ${
+                        sortKey === opt.key
+                          ? "text-black font-bold"
+                          : "text-gray-400 hover:text-gray-800 font-medium"
+                      }`}
+                    >
+                      {opt.label}
+                      {/* [추가] 정렬 방향 인디케이터 (▲/▼) */}
+                      {sortKey === opt.key && (
+                        <span className="text-[8px] text-[#0037F0]">
+                          {sortOrder === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* 2. 필터 탭 (복구됨) */}
-              <div className="bg-gray-200/80 p-1 rounded-lg inline-flex h-9 self-start sm:self-auto">
+              {/* Filter Tabs */}
+              <div className="bg-white border border-gray-200 p-1 rounded-lg inline-flex shadow-sm">
                 {[
-                  { key: "all", label: "전체" },
-                  { key: "active", label: "진행 중" },
-                  { key: "done", label: "종료" },
+                  { key: "all", label: "All" },
+                  { key: "active", label: "Active" },
+                  { key: "done", label: "Done" },
                 ].map((tab) => (
                   <button
                     key={tab.key}
                     onClick={() => setFilter(tab.key)}
-                    className={`px-4 py-0.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all duration-200 ${
                       filter === tab.key
-                        ? "bg-white text-black shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
+                        ? "bg-[#F5F5F7] text-black shadow-inner"
+                        : "text-gray-400 hover:text-gray-700"
                     }`}
                   >
                     {tab.label}
@@ -171,22 +174,18 @@ export default function DashboardClient({
           )}
         </div>
 
+        {/* 프로젝트 그리드 */}
         <section className="mb-16">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              📂 Active Projects{" "}
-              {isOverview && (
-                <span className="text-xs font-normal text-gray-400 ml-2">
-                  최근 4개 항목
-                </span>
-              )}
+          <div className="flex justify-between items-center mb-5">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              📂 Active Projects
             </h2>
             {isOverview && (
               <Link
                 href="/projects"
-                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                className="text-xs font-bold text-gray-400 hover:text-black transition-colors"
               >
-                더 보기 →
+                VIEW ALL →
               </Link>
             )}
           </div>
@@ -195,12 +194,15 @@ export default function DashboardClient({
             {processedProjects.map((project) => (
               <div
                 key={project.id}
-                className="group bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_20px_rgba(0,0,0,0.08)] border border-gray-100 transition-all duration-300 flex flex-col hover:-translate-y-1 overflow-hidden"
+                className="group relative bg-white rounded-xl border border-gray-200 
+                  transition-all duration-300 
+                  hover:border-[#0037F0] hover:shadow-xl hover:-translate-y-1 
+                  flex flex-col overflow-visible"
               >
-                {/* 카드 헤더: 레이아웃 고정 */}
-                <div className="px-5 py-4 flex justify-between items-start h-[60px]">
+                {/* 카드 상단: 팀 뱃지 & 리포트 상태 */}
+                <div className="px-5 py-4 flex justify-between items-start">
                   <span
-                    className={`px-2 py-0.5 h-fit rounded text-[10px] font-bold uppercase tracking-wider ${
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
                       project.team.includes("1팀")
                         ? "bg-red-50 text-red-600"
                         : project.team.includes("2팀")
@@ -213,90 +215,80 @@ export default function DashboardClient({
                     {project.team}
                   </span>
 
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        project.status === "진행 중"
-                          ? "bg-blue-50 text-blue-600 border-blue-100"
-                          : "bg-gray-50 text-gray-500 border-gray-100"
-                      }`}
-                    >
-                      {project.status === "진행 중" && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                      )}
-                      {project.status}
-                    </span>
-
-                    {/* 리포트 상태 아이콘 (미니멀 디자인) */}
-                    {project.reportStatus && project.reportStatus !== "N/A" && (
+                  {/* 리포트 상태 툴팁 */}
+                  {project.reportStatus && project.reportStatus !== "N/A" && (
+                    <div className="relative group/tooltip z-20 cursor-help">
                       <div
-                        className={`w-5 h-5 flex items-center justify-center rounded-full border shadow-sm transition-transform hover:scale-110 cursor-help ${
+                        className={`w-2.5 h-2.5 rounded-full border border-white shadow-sm transition-transform hover:scale-125 ${
                           project.reportStatus === "Approved"
-                            ? "bg-green-100 border-green-200 text-green-600"
+                            ? "bg-green-500"
                             : project.reportStatus === "Pending"
-                            ? "bg-yellow-50 border-yellow-200 text-yellow-600"
-                            : "bg-red-50 border-red-200 text-red-600"
+                            ? "bg-yellow-400"
+                            : "bg-red-500"
                         }`}
-                        title={`지난달 보고서: ${project.reportStatus}`}
-                      >
-                        {project.reportStatus === "Approved" ? (
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="3"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                        ) : (
-                          <span className="text-[10px] font-bold">!</span>
-                        )}
+                      />
+                      <div className="absolute right-0 top-5 w-max min-w-[120px] bg-gray-900/95 backdrop-blur text-white text-[10px] p-3 rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-all duration-200 pointer-events-none shadow-xl translate-y-2 group-hover/tooltip:translate-y-0 z-50">
+                        <p className="font-bold text-gray-400 mb-2 uppercase text-[9px] tracking-wider">
+                          Report Status
+                        </p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            <span>Approved (완료)</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                            <span>Pending (대기)</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <span>Issue (확인 필요)</span>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="px-5 pb-4 flex-1">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 flex items-center justify-center text-xl bg-gray-50 rounded-lg border border-gray-100 shadow-sm shrink-0">
+                {/* 메인 컨텐츠 */}
+                <div className="px-5 pb-3 flex-1">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 flex items-center justify-center text-xl bg-gray-50 rounded-lg border border-gray-100 shrink-0 group-hover:bg-blue-50/50 transition-colors">
                       {project.icon && !project.icon.startsWith("http") ? (
                         project.icon
                       ) : project.icon ? (
                         <img
                           src={project.icon}
                           alt="icon"
-                          className="w-6 h-6 object-contain"
+                          className="w-5 h-5 object-contain"
                         />
                       ) : (
                         "📄"
                       )}
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-bold text-gray-900 leading-tight truncate">
+                    <div className="min-w-0 pt-0.5">
+                      <h3 className="text-base font-bold text-gray-900 leading-tight truncate group-hover:text-[#0037F0] transition-colors">
                         {project.title}
                       </h3>
-                      <p className="text-[11px] text-gray-400 mt-1 font-medium tracking-wide">
+                      <p className="text-[10px] text-gray-400 mt-1 font-medium font-mono">
                         {project.period}
                       </p>
                     </div>
                   </div>
-                  <div className="space-y-2 pt-1">
-                    <div className="flex justify-between items-center text-xs group/row">
+
+                  <div className="mb-4 pt-3 border-t border-dashed border-gray-100 space-y-2">
+                    {/* Manager Row */}
+                    <div className="flex justify-between items-center text-xs">
                       <span className="text-gray-400 font-medium">Manager</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {project.managerImage ? (
                           <img
                             src={project.managerImage}
                             alt={project.manager}
-                            className="w-5 h-5 rounded-full border border-gray-200 object-cover"
+                            className="w-4 h-4 rounded-full border border-gray-100 object-cover"
                           />
                         ) : (
-                          <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[8px] text-gray-500 border border-gray-200">
+                          <div className="w-4 h-4 rounded-full bg-gray-100 flex items-center justify-center text-[8px] font-bold text-gray-500">
                             {project.manager.slice(0, 1)}
                           </div>
                         )}
@@ -305,45 +297,68 @@ export default function DashboardClient({
                         </span>
                       </div>
                     </div>
+
+                    {/* [수정] PoC Row에도 프로필 이미지 적용 */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-400 font-medium">PoC</span>
+                      <div className="flex items-center gap-1.5">
+                        {project.pocImage ? (
+                          <img
+                            src={project.pocImage}
+                            alt={project.poc}
+                            className="w-4 h-4 rounded-full border border-gray-100 object-cover"
+                          />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full bg-gray-100 flex items-center justify-center text-[8px] font-bold text-gray-500">
+                            {/* 이름이 없으면 '-' 표시 */}
+                            {project.poc ? project.poc.slice(0, 1) : "-"}
+                          </div>
+                        )}
+                        <span className="font-semibold text-gray-700">
+                          {project.poc || "-"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-5 flex flex-wrap gap-1.5">
-                    {project.workScope.length > 0
-                      ? [...project.workScope]
-                          .sort((a, b) => a.localeCompare(b, "ko"))
-                          .map((scope, idx) => (
-                            <span
-                              key={idx}
-                              className="px-1.5 py-0.5 bg-gray-50 text-gray-500 text-[10px] font-medium rounded border border-gray-100"
-                            >
-                              {scope}
-                            </span>
-                          ))
-                      : null}
+
+                  {/* Work Scope 태그 */}
+                  <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                    {project.workScope.map((scope, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1.5 py-0.5 bg-gray-50 text-gray-500 text-[10px] font-medium rounded border border-gray-100"
+                      >
+                        {scope}
+                      </span>
+                    ))}
                   </div>
                 </div>
 
-                <div className="px-5 py-4 mt-auto bg-gray-50/50 border-t border-gray-100">
-                  <div className="flex justify-between text-[10px] mb-1.5">
-                    <span className="text-gray-400 font-medium">Progress</span>
-                    <span
-                      className={`font-bold ${
-                        project.progress === 100
-                          ? "text-green-600"
-                          : "text-blue-600"
-                      }`}
-                    >
+                {/* 하단 정보 */}
+                <div className="px-5 py-3 mt-2 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between gap-4">
+                  <span
+                    className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded border ${
+                      project.status === "진행 중"
+                        ? "bg-blue-50 text-[#0037F0] border-blue-100"
+                        : "bg-gray-100 text-gray-500 border-gray-200"
+                    }`}
+                  >
+                    {project.status}
+                  </span>
+                  <div className="flex-1 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          project.progress === 100
+                            ? "bg-green-500"
+                            : "bg-[#0037F0]"
+                        }`}
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-500 w-6 text-right">
                       {project.progress}%
                     </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                        project.progress === 100
-                          ? "bg-green-500"
-                          : "bg-blue-600"
-                      }`}
-                      style={{ width: `${project.progress}%` }}
-                    />
                   </div>
                 </div>
               </div>
@@ -352,11 +367,12 @@ export default function DashboardClient({
         </section>
 
         {isOverview && (
-          <section className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+          // 배경 흰색 + 보더만 사용 (그림자 X)
+          <section className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
                 <svg
-                  className="w-6 h-6"
+                  className="w-5 h-5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -369,23 +385,18 @@ export default function DashboardClient({
                   ></path>
                 </svg>
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">
-                  컨설팅팀 자동화 현황
-                </h2>
-                <p className="text-sm text-gray-500">
-                  노션에서 정의된 프로세스가 자동으로 동기화됩니다.
-                </p>
-              </div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Automation Status
+              </h2>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {Object.entries(groupedAutomations).map(([category, items]) => (
                 <div key={category}>
-                  <h3 className="font-semibold text-gray-800 mb-6 flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                     {category}
                   </h3>
-                  <div className="space-y-4 relative">
-                    <div className="absolute left-[19px] top-4 bottom-4 w-0.5 bg-gray-100"></div>
+                  <div className="space-y-2">
                     {items.map((item) => (
                       <ProcessItem
                         key={item.id}
@@ -399,51 +410,51 @@ export default function DashboardClient({
             </div>
           </section>
         )}
-      </main>
+      </div>
 
       {/* 모달 팝업 */}
       {selectedProcess && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
             onClick={() => setSelectedProcess(null)}
           ></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[fadeIn_0.2s_ease-out]">
-            {/* [수정됨] 모달 헤더 색상 분기 */}
-            <div
-              className={`px-6 py-4 border-b flex justify-between items-center ${
-                selectedProcess.status === "AUTO"
-                  ? "bg-green-50/50"
-                  : selectedProcess.status === "PARTIAL"
-                  ? "bg-orange-50/50"
-                  : "bg-gray-50"
-              }`}
-            >
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+            <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-lg text-gray-900">
                 {selectedProcess.title}
               </h3>
               <button
                 onClick={() => setSelectedProcess(null)}
-                className="text-gray-400"
+                className="text-gray-400 hover:text-black"
               >
                 ✕
               </button>
             </div>
             <div className="p-6">
-              <p className="text-gray-600 text-sm mb-6 whitespace-pre-line">
+              <span
+                className={`inline-block px-2 py-1 text-[10px] font-bold rounded mb-4 ${
+                  selectedProcess.status === "AUTO"
+                    ? "bg-blue-50 text-[#0037F0]"
+                    : "bg-orange-50 text-orange-600"
+                }`}
+              >
+                {selectedProcess.status}
+              </span>
+              <p className="text-gray-600 text-sm mb-6 whitespace-pre-line leading-relaxed">
                 {selectedProcess.description}
               </p>
               {selectedProcess.techStack &&
                 selectedProcess.techStack.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 mb-6">
+                  <div className="mb-6">
                     <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2">
-                      Tech Stack
+                      Stack
                     </h4>
                     <div className="flex gap-2 flex-wrap">
                       {selectedProcess.techStack.map((tag) => (
                         <span
                           key={tag}
-                          className="px-2 py-1 bg-white border border-gray-200 rounded text-xs font-medium text-gray-600"
+                          className="px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs font-medium text-gray-600"
                         >
                           {tag}
                         </span>
@@ -454,9 +465,9 @@ export default function DashboardClient({
               <a
                 href={selectedProcess.notionUrl}
                 target="_blank"
-                className="block w-full bg-black text-white text-center py-3 rounded-xl text-sm font-semibold"
+                className="block w-full bg-[#0037F0] hover:bg-blue-700 text-white text-center py-3 rounded-lg text-sm font-bold transition-colors"
               >
-                노션 가이드 이동 →
+                View Guide
               </a>
             </div>
           </div>
@@ -466,7 +477,6 @@ export default function DashboardClient({
   );
 }
 
-// [수정됨] ProcessItem: PARTIAL -> Orange
 function ProcessItem({
   data,
   onClick,
@@ -475,48 +485,43 @@ function ProcessItem({
   onClick: () => void;
 }) {
   const { title, status, icon } = data;
-
-  let badgeStyle = "bg-gray-100 text-gray-400";
-  let iconStyle = "bg-gray-100 text-gray-400";
-  let hoverBorder = "group-hover:border-gray-300";
-
-  if (status === "AUTO") {
-    badgeStyle = "bg-green-50 text-green-600";
-    iconStyle = "bg-green-100 text-green-600";
-    hoverBorder = "group-hover:border-green-300";
-  } else if (status === "PARTIAL") {
-    badgeStyle = "bg-orange-50 text-orange-600";
-    iconStyle = "bg-orange-100 text-orange-600";
-    hoverBorder = "group-hover:border-orange-300";
-  }
+  const isAuto = status === "AUTO";
 
   return (
     <div
       onClick={onClick}
-      className="relative flex items-center gap-4 cursor-pointer group"
+      className="group flex items-center gap-3 p-3 rounded-lg border border-transparent hover:bg-white hover:border-gray-200 transition-all cursor-pointer bg-gray-50"
     >
       <div
-        className={`w-10 h-10 rounded-full flex items-center justify-center border-4 border-white z-10 shadow-sm group-hover:scale-110 transition-transform ${iconStyle} overflow-hidden`}
+        className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 border
+         ${
+           isAuto
+             ? "bg-white text-[#0037F0] border-gray-100"
+             : "bg-white text-orange-500 border-gray-100"
+         }
+        `}
       >
         {icon && !icon.startsWith("http") ? (
-          <span className="text-lg">{icon}</span>
+          <span>{icon}</span>
         ) : icon ? (
-          <img src={icon} alt="" className="w-6 h-6 object-contain" />
+          <img src={icon} alt="" className="w-4 h-4 object-contain" />
         ) : (
-          "🤖"
+          "⚡"
         )}
       </div>
-      <div
-        className={`flex-1 bg-gray-50 p-4 rounded-xl border border-gray-100 transition-all ${hoverBorder}`}
-      >
-        <div className="flex justify-between items-center mb-1">
-          <span className="font-bold text-sm text-gray-900">{title}</span>
-          <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded ${badgeStyle}`}
-          >
-            {status}
-          </span>
-        </div>
+      <div className="flex-1 min-w-0 flex justify-between items-center">
+        <span className="font-semibold text-sm text-gray-700 group-hover:text-black truncate">
+          {title}
+        </span>
+        <span
+          className={`text-[9px] font-bold px-1.5 py-0.5 rounded ml-2 ${
+            isAuto
+              ? "bg-blue-100 text-blue-700"
+              : "bg-orange-100 text-orange-700"
+          }`}
+        >
+          {status}
+        </span>
       </div>
     </div>
   );

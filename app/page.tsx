@@ -111,6 +111,7 @@ async function getDashboardDataRaw() {
         const manager = props["담당자"]?.people?.[0]?.name || "-";
         const managerImage = props["담당자"]?.people?.[0]?.avatar_url || null;
         const poc = props["PoC"]?.people?.[0]?.name || "-";
+        const pocImage = props["PoC"]?.people?.[0]?.avatar_url || null;
 
         const workScope: string[] = [];
         const rollupProp = props["업무_표시용"];
@@ -143,6 +144,7 @@ async function getDashboardDataRaw() {
           manager,
           managerImage,
           poc,
+          pocImage,
           workScope,
           reportStatus,
           apiProjectId,

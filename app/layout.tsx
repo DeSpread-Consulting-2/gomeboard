@@ -1,8 +1,8 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
-import Providers from "./providers"; // 위에서 수정한 Providers
-import AuthWrapper from "./components/AuthWrapper"; // 위에서 만든 Wrapper
+import Providers from "./providers";
+import AuthWrapper from "./components/AuthWrapper";
 
 export const metadata: Metadata = {
   title: "gomeboard",
@@ -28,9 +28,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="font-sans antialiased bg-[#F5F5F7]">
+      {/* [핵심] bg-white로 설정하여 모든 틈새를 하얗게 만듭니다 */}
+      <body className="font-sans antialiased bg-white text-[#1D1D1F]">
         <Providers>
-          {/* AuthWrapper가 로그인 여부를 판단해 화면을 통제합니다 */}
           <AuthWrapper>{children}</AuthWrapper>
         </Providers>
       </body>

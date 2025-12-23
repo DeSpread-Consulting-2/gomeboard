@@ -46,10 +46,25 @@ export default function AuthWrapper({
 
   // 3. 정상 접근 허용
   return (
-    <div className="flex flex-col min-h-screen bg-[#F5F5F7]">
-      <Navbar />
-      <main className="flex-grow pt-4 pb-20">{children}</main>
-      <Footer />
+    // [핵심 레이아웃 구조]
+    // min-h-screen: 화면 전체 높이 확보
+    // flex-col: 수직 정렬
+    <div className="flex flex-col min-h-screen bg-white">
+      {/* 네비게이션바 (고정) */}
+      <div className="flex-none z-50 sticky top-0">
+        <Navbar />
+      </div>
+
+      {/* [중요] flex-1: 남은 공간을 모두 차지함 
+         컨텐츠가 짧아도 이 영역이 늘어나서 푸터를 바닥으로 밀어버립니다.
+         w-full: 가로 꽉 채움
+      */}
+      <main className="flex-1 flex flex-col w-full relative">{children}</main>
+
+      {/* 푸터 (고정) */}
+      <div className="flex-none">
+        <Footer />
+      </div>
     </div>
   );
 }
