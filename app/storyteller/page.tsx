@@ -2,6 +2,7 @@
 import React from "react";
 import StorytellerClient from "./StorytellerClient";
 import { unstable_cache } from "next/cache";
+export const dynamic = "force-dynamic";
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const STORYTELLER_DB_ID = process.env.NOTION_STORYTELLER_DB_ID;
