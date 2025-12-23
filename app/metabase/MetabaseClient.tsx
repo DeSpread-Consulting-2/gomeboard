@@ -12,25 +12,26 @@ interface MetabaseClientProps {
 
 export default function MetabaseClient({ blocks }: MetabaseClientProps) {
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans">
-      {/* [Layout Fix] Overview 기준 통일: max-w-[1600px], py-10 */}
-      <main className="max-w-[1600px] mx-auto px-6 py-10">
-        {/* [Layout Fix] 제목 아래 여백 mb-8로 축소 */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight mb-2 text-gray-900">
+    <div className="flex-1 w-full bg-[#F5F5F7] text-[#1D1D1F] font-sans">
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        <div className="mb-10">
+          <h1
+            className="text-[#0037F0] text-4xl font-black uppercase tracking-tighter mb-2 leading-[0.9]"
+            style={{ fontFamily: "'General Sans', sans-serif" }}
+          >
             Metabase
           </h1>
-          <p className="text-gray-500 text-base">
-            데이터 시각화 차트 및 관련 가이드를 확인하세요.
+          <p className="text-gray-500 text-sm font-medium ml-1">
+            데이터 시각화 차트 및 관련 가이드
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100 p-8 md:p-12">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 md:p-12 shadow-sm">
           <BlockListRenderer blocks={blocks} level={0} />
 
           {blocks.length === 0 && (
             <p className="text-gray-400 text-center py-10">
-              표시할 콘텐츠가 없습니다. 노션 페이지를 확인해주세요.
+              표시할 콘텐츠가 없습니다.
             </p>
           )}
         </div>

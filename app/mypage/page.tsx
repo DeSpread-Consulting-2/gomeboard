@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// app/mypage/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -54,19 +53,20 @@ export default function MyPage() {
   const [myRanks, setMyRanks] = useState<LeaderboardItem[]>([]);
   const [isLoadingRank, setIsLoadingRank] = useState(false);
 
-  // 1. 초기화
+  // 1. 초기화 (저장된 채널 정보 로드)
   useEffect(() => {
     const saved = localStorage.getItem("my_telegram_channel");
-    if (saved) setMyChannel(JSON.parse(saved));
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setMyChannel(parsed);
+      // 저장된 정보가 있으면 바로 랭킹 조회
+      fetchMyRank(parsed.handle);
+    }
   }, []);
 
-  // 2. 랭킹 조회
-  useEffect(() => {
-    if (myChannel?.handle) fetchMyRank(myChannel.handle);
-  }, [myChannel]);
-
+  // 2. 랭킹 조회 함수
   const fetchMyRank = async (handle: string) => {
-    setIsLoadingRank(true);
+    setIsLoadingRank(true); // 로딩 시작
     try {
       const response = await fetch("/api/my-rank", {
         method: "POST",
@@ -78,22 +78,32 @@ export default function MyPage() {
     } catch (error) {
       console.error(error);
     } finally {
-      setIsLoadingRank(false);
+      setIsLoadingRank(false); // 로딩 종료
     }
   };
 
+  // [Logic] 입력값 정제 (링크 -> 핸들 변환)
   const cleanInput = (input: string) => {
     let clean = input.trim();
-    if (clean.includes("t.me/")) clean = clean.split("t.me/")[1].split("/")[0];
+    // t.me/ 또는 telegram.me/ 링크 처리
+    if (clean.includes("t.me/") || clean.includes("telegram.me/")) {
+      const parts = clean.split("me/"); // t.me/abc -> abc
+      if (parts.length > 1) {
+        clean = parts[1].split("/")[0]; // abc/123 -> abc
+        clean = clean.split("?")[0]; // abc?start=1 -> abc
+      }
+    }
     return clean
       .replace("@", "")
       .replace("https://", "")
       .replace("http://", "");
   };
 
+  // 채널 인증 핸들러
   const handleVerifyChannel = async () => {
     if (!channelInput || !user?.telegram?.telegramUserId) return;
-    const cleanId = cleanInput(channelInput);
+
+    const cleanId = cleanInput(channelInput); // 링크를 핸들로 변환
 
     setIsVerifying(true);
     try {
@@ -111,7 +121,6 @@ export default function MyPage() {
         const channelData: ChannelData = {
           handle: data.channel.id,
           title: data.channel.title,
-          // 백엔드에서 subscribers를 제대로 주는지 확인 필요 (없으면 0)
           subscribers: data.channel.subscribers || 0,
           photoUrl: data.channel.photoUrl,
           url: data.channel.url,
@@ -123,6 +132,8 @@ export default function MyPage() {
           JSON.stringify(channelData)
         );
         setChannelInput("");
+
+        // 인증 성공 후 랭킹 즉시 조회 (로딩 표시됨)
         fetchMyRank(channelData.handle);
       } else {
         alert(`❌ 검증 실패: ${data.message || "오류가 발생했습니다."}`);
@@ -147,7 +158,7 @@ export default function MyPage() {
   const isTelegramLinked = !!user.telegram;
   const isChannelLinked = !!myChannel;
 
-  // 배너 콘텐츠 로직
+  // 배너 로직
   const getBannerContent = () => {
     if (!isTelegramLinked) {
       return {
@@ -163,7 +174,6 @@ export default function MyPage() {
         desc: "리더보드 확인을 위해 운영 중인 채널을 인증해주세요.",
       };
     }
-    // [수정] 성공 상태에서도 안내문 유지
     return {
       type: "info",
       title: "연동 상태 유지 필수",
@@ -182,47 +192,50 @@ export default function MyPage() {
     "User";
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] font-sans">
-      <main className="max-w-[1200px] mx-auto px-4 py-8">
-        <div className="mb-6 flex items-end justify-between">
+    <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans selection:bg-[#0037F0] selection:text-white">
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        {/* 헤더 */}
+        <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500 text-sm">계정 및 활동 관리</p>
+            <h1
+              className="text-[#0037F0] text-4xl font-black uppercase tracking-tighter mb-2 leading-[0.9]"
+              style={{ fontFamily: "'General Sans', sans-serif" }}
+            >
+              My Page
+            </h1>
+            <p className="text-gray-500 text-sm font-medium ml-1">
+              계정 및 활동 관리 대시보드
+            </p>
           </div>
           <Link
             href="/"
-            className="text-xs text-gray-400 hover:text-gray-600 underline"
+            className="text-xs font-bold text-gray-400 hover:text-black transition-colors mb-1"
           >
-            ← Home
+            ← Back to Home
           </Link>
         </div>
 
         {/* 메인 그리드 */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* ==================================================================================
-              [왼쪽 컬럼] 계정 정보 (lg:col-span-7)
-              ================================================================================== */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* 1. 상단: 프로필 + 채널 (한 줄 배치, 높이 맞춤) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* [왼쪽] 계정 정보 (lg:col-span-7) */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* 프로필 & 채널 카드 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* [좌] 프로필 카드 */}
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4 relative overflow-hidden h-[88px]">
+              {/* 프로필 카드 */}
+              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm flex items-center gap-4 relative overflow-hidden h-[100px] transition-all hover:border-[#0037F0]">
                 <div className="relative shrink-0">
                   <img
                     src={profileImage || ""}
                     alt=""
-                    className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm bg-gray-100"
+                    className="w-14 h-14 rounded-full object-cover border border-gray-100 bg-gray-50"
                   />
                   {!profileImage && (
-                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold border-2 border-white">
+                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold border border-gray-200">
                       {displayName.slice(0, 1).toUpperCase()}
                     </div>
                   )}
                   {isTelegramLinked && (
-                    <div
-                      className="absolute -bottom-1 -right-1 bg-[#2AABEE] text-white p-0.5 rounded-full border-2 border-white shadow-sm z-10"
-                      title="Telegram Verified"
-                    >
+                    <div className="absolute -bottom-1 -right-1 bg-[#2AABEE] text-white p-0.5 rounded-full border-2 border-white shadow-sm z-10">
                       <svg
                         className="w-3 h-3"
                         fill="currentColor"
@@ -234,27 +247,33 @@ export default function MyPage() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-bold text-gray-900 text-base leading-tight truncate">
+                  <h2 className="font-bold text-gray-900 text-lg leading-tight truncate">
                     {displayName}
                   </h2>
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">
+                  <p className="text-xs text-gray-400 mt-0.5 font-medium truncate">
                     {isTelegramLinked ? "Verified User" : "Guest"}
                   </p>
                 </div>
               </div>
 
-              {/* [우] 채널 설정 카드 */}
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col justify-center h-[88px]">
+              {/* 채널 설정 카드 */}
+              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm flex flex-col justify-center h-[100px] transition-all hover:border-[#0037F0]">
                 {!isTelegramLinked ? (
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] text-gray-500 flex-1">
-                      채널 설정을 위해
-                      <br />
-                      먼저 로그인하세요.
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl">
+                      🔒
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-gray-900">
+                        로그인 필요
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        채널 설정을 위해 연결하세요.
+                      </p>
+                    </div>
                     <button
                       onClick={() => linkTelegram()}
-                      className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-800 shrink-0"
+                      className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-800 shrink-0 transition-colors"
                     >
                       Connect
                     </button>
@@ -264,28 +283,29 @@ export default function MyPage() {
                     <div className="flex gap-2 items-center">
                       <input
                         type="text"
-                        placeholder="@channel"
+                        placeholder="t.me/channel"
                         value={channelInput}
                         onChange={(e) => setChannelInput(e.target.value)}
-                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[#2AABEE] outline-none"
+                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold focus:border-[#0037F0] focus:bg-white outline-none transition-all"
                       />
                       <button
                         onClick={handleVerifyChannel}
                         disabled={!channelInput || isVerifying}
-                        className="bg-[#2AABEE] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#229ED9] whitespace-nowrap"
+                        className="bg-[#0037F0] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-800 whitespace-nowrap transition-colors"
                       >
-                        인증
+                        {isVerifying ? "..." : "인증"}
                       </button>
                     </div>
-                    <p className="text-[9px] text-gray-400">
+                    <p className="text-[10px] text-gray-400 pl-1">
                       * <strong>@gome_login_bot</strong> 관리자 추가 필수
                     </p>
                   </div>
                 ) : (
-                  // [수정] 인증된 채널 정보: 한 줄 배치 & 휴지통 아이콘
+                  // [수정] 채널 인증 완료 상태: 이미지 크기 및 정보 표시 개선
                   <div className="flex items-center justify-between w-full gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 overflow-hidden relative border border-gray-100">
+                      {/* [수정] 이미지 크기 w-14 h-14로 키워서 프로필과 통일, rounded-xl 유지 */}
+                      <div className="w-14 h-14 rounded-xl bg-gray-50 shrink-0 overflow-hidden relative border border-gray-100">
                         {myChannel.photoUrl ? (
                           <img
                             src={myChannel.photoUrl}
@@ -293,35 +313,35 @@ export default function MyPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[#2AABEE] font-bold text-sm bg-blue-50">
+                          <div className="w-full h-full flex items-center justify-center text-[#0037F0] font-bold text-xl bg-blue-50">
                             {myChannel.title[0]}
                           </div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1">
-                          <h4 className="font-bold text-sm text-gray-900 truncate max-w-[100px]">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-bold text-sm text-gray-900 truncate max-w-[120px]">
                             {myChannel.title}
                           </h4>
-                          <span className="text-[8px] bg-green-50 text-green-600 px-1 rounded border border-green-100 font-bold">
+                          <span className="text-[9px] bg-[#0037F0] text-white px-1.5 py-0.5 rounded font-bold uppercase">
                             OWNER
                           </span>
                         </div>
-                        <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                        {/* [수정] 구독자 수 0명일 때도 표시되도록 조건 수정 */}
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5 font-medium">
                           @{myChannel.handle} ·{" "}
-                          {myChannel.subscribers
-                            ? myChannel.subscribers.toLocaleString()
-                            : "-"}{" "}
-                          subs
+                          <span className="text-gray-600">
+                            {typeof myChannel.subscribers === "number"
+                              ? myChannel.subscribers.toLocaleString()
+                              : 0}{" "}
+                            subs
+                          </span>
                         </p>
                       </div>
                     </div>
-
-                    {/* [수정] 휴지통 아이콘 (연동 해제) */}
                     <button
                       onClick={handleDeleteChannel}
                       className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all shrink-0"
-                      title="연동 해제"
                     >
                       <svg
                         className="w-4 h-4"
@@ -342,19 +362,19 @@ export default function MyPage() {
               </div>
             </div>
 
-            {/* 2. 안내 배너 (성공 시에도 표시됨 - Type: Info) */}
+            {/* 안내 배너 */}
             <div
-              className={`border rounded-2xl p-4 flex items-center gap-4 shadow-sm ${
+              className={`border rounded-xl p-4 flex items-center gap-4 shadow-sm ${
                 banner.type === "success" || banner.type === "info"
-                  ? "bg-blue-50/50 border-blue-100"
-                  : "bg-orange-50/50 border-orange-100"
+                  ? "bg-blue-50 border-blue-100"
+                  : "bg-orange-50 border-orange-100"
               }`}
             >
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-base ${
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-base font-bold ${
                   banner.type === "success" || banner.type === "info"
-                    ? "bg-blue-100 text-blue-600"
-                    : "bg-orange-100 text-orange-600"
+                    ? "bg-white text-[#0037F0] border border-blue-100"
+                    : "bg-white text-orange-500 border border-orange-100"
                 }`}
               >
                 {banner.type === "success" || banner.type === "info"
@@ -365,14 +385,14 @@ export default function MyPage() {
                 <h3
                   className={`font-bold text-xs mb-0.5 ${
                     banner.type === "success" || banner.type === "info"
-                      ? "text-blue-800"
-                      : "text-orange-800"
+                      ? "text-[#0037F0]"
+                      : "text-orange-700"
                   }`}
                 >
                   {banner.title}
                 </h3>
                 <p
-                  className={`text-[11px] ${
+                  className={`text-[11px] font-medium ${
                     banner.type === "success" || banner.type === "info"
                       ? "text-blue-600"
                       : "text-orange-600"
@@ -383,14 +403,14 @@ export default function MyPage() {
               </div>
             </div>
 
-            {/* 3. 연결된 계정 리스트 (모든 계정 복구) */}
-            <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-              <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
+            {/* 연결된 계정 리스트 */}
+            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                 <h3 className="font-bold text-gray-900 text-sm">
                   Linked Accounts
                 </h3>
               </div>
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-gray-100">
                 <AccountRow
                   icon="✈️"
                   name="Telegram"
@@ -456,22 +476,23 @@ export default function MyPage() {
             </div>
           </div>
 
-          {/* ==================================================================================
-              [오른쪽 컬럼] 리더보드 (lg:col-span-5)
-              ================================================================================== */}
+          {/* [오른쪽] 리더보드 (lg:col-span-5) */}
           <div className="lg:col-span-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">My Rankings</h2>
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                My Rankings
+              </h2>
               {isChannelLinked && (
-                <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
-                  Live
+                <span className="bg-green-50 text-green-700 text-[10px] px-2 py-0.5 rounded border border-green-100 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  LIVE
                 </span>
               )}
             </div>
 
             {!isChannelLinked ? (
-              <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-8 text-center flex flex-col items-center justify-center h-64">
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-2xl mb-3 grayscale opacity-50">
+              <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center flex flex-col items-center justify-center h-64">
+                <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-2xl mb-3 grayscale opacity-50 border border-gray-100">
                   🔒
                 </div>
                 <p className="text-sm font-bold text-gray-600">
@@ -482,64 +503,63 @@ export default function MyPage() {
                 </p>
               </div>
             ) : isLoadingRank ? (
-              <div className="grid grid-cols-2 gap-3">
-                {[1, 2].map((i) => (
+              <div className="grid grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((i) => (
                   <div
                     key={i}
-                    className="aspect-[4/3] bg-gray-200 rounded-2xl animate-pulse"
+                    className="h-[80px] bg-gray-100 rounded-xl animate-pulse border border-gray-200"
                   ></div>
                 ))}
               </div>
             ) : myRanks.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 {myRanks.map((item, idx) => (
                   <div
                     key={idx}
-                    className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between hover:border-[#2AABEE] transition-colors group"
+                    className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex flex-col justify-between hover:border-[#0037F0] hover:shadow-md transition-all group h-[90px]"
                   >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center text-[14px] text-gray-400 font-bold group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
-                        {item.campaign.slice(0, 1).toUpperCase()}
-                      </div>
-                      <div className="text-right">
-                        <span className="block text-xl font-bold text-[#0037F0]">
-                          #{item.rank}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <h4
-                        className="font-bold text-gray-900 text-sm truncate mb-1"
-                        title={item.campaign}
-                      >
-                        {item.campaign}
-                      </h4>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-medium text-gray-600">
-                          {item.score.toLocaleString()}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold ${
-                            item.change > 0
-                              ? "text-red-500"
-                              : item.change < 0
-                              ? "text-blue-500"
-                              : "text-gray-400"
-                          }`}
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded bg-gray-50 border border-gray-100 flex items-center justify-center text-xs text-gray-400 font-bold group-hover:bg-blue-50 group-hover:text-[#0037F0] transition-colors">
+                          {item.campaign.slice(0, 1).toUpperCase()}
+                        </div>
+                        <h4
+                          className="font-bold text-gray-900 text-xs truncate max-w-[80px]"
+                          title={item.campaign}
                         >
-                          {item.change !== 0
-                            ? item.change > 0
-                              ? `▲${item.change}`
-                              : `▼${Math.abs(item.change)}`
-                            : "-"}
-                        </span>
+                          {item.campaign}
+                        </h4>
                       </div>
+                      <span className="text-lg font-black text-[#0037F0]">
+                        #{item.rank}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-auto">
+                      <span className="text-[10px] text-gray-400 font-medium">
+                        Rank Change
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold ${
+                          item.change > 0
+                            ? "text-red-500"
+                            : item.change < 0
+                            ? "text-blue-500"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        {item.change !== 0
+                          ? item.change > 0
+                            ? `▲ ${item.change}`
+                            : `▼ ${Math.abs(item.change)}`
+                          : "-"}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center h-64 flex flex-col items-center justify-center">
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center h-64 flex flex-col items-center justify-center">
                 <div className="text-2xl mb-2">📉</div>
                 <p className="text-sm font-bold text-gray-900">No Data</p>
                 <p className="text-xs text-gray-500 mt-1">
@@ -555,7 +575,7 @@ export default function MyPage() {
 }
 
 // ----------------------------------------------------------------------
-// AccountRow (Compact)
+// AccountRow (Compact Style)
 // ----------------------------------------------------------------------
 function AccountRow({
   icon,
@@ -567,13 +587,13 @@ function AccountRow({
   isPrimary = false,
 }: any) {
   return (
-    <div className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors group">
+      <div className="flex items-center gap-4">
         <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shadow-sm ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg shadow-sm transition-colors ${
             isConnected
-              ? "bg-[#F5F5F7] border border-gray-100"
-              : "bg-gray-100 text-gray-400 grayscale"
+              ? "bg-white border border-gray-200 text-black"
+              : "bg-gray-50 text-gray-300 grayscale"
           }`}
         >
           {icon === "G" ? (
@@ -588,28 +608,28 @@ function AccountRow({
           )}
         </div>
         <div>
-          <h4 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
+          <h4 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
             {name}{" "}
             {isPrimary && isConnected && (
-              <span className="bg-blue-100 text-blue-600 text-[9px] px-1 py-0.5 rounded font-extrabold leading-none">
+              <span className="bg-[#0037F0] text-white text-[9px] px-1.5 py-0.5 rounded font-bold leading-none">
                 MAIN
               </span>
             )}
           </h4>
-          <p className="text-[10px] text-gray-500 font-medium max-w-[150px] truncate">
+          <p className="text-[11px] text-gray-500 font-medium max-w-[180px] truncate mt-0.5">
             {isConnected ? identifier || "Connected" : "Not linked"}
           </p>
         </div>
       </div>
       <button
         onClick={isConnected ? onUnlink : onLink}
-        className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all border ${
+        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
           isConnected
-            ? "border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50"
-            : "border-black bg-black text-white hover:bg-gray-800 hover:scale-105 shadow-sm"
+            ? "border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 bg-white"
+            : "border-transparent bg-black text-white hover:bg-gray-800 shadow-sm"
         }`}
       >
-        {isConnected ? "Unlink" : "Connect"}
+        {isConnected ? "Disconnect" : "Connect"}
       </button>
     </div>
   );

@@ -1,4 +1,3 @@
-// app/api/verify-channel/route.ts
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -20,16 +19,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. 입력값 정제 (URL이나 @가 있어도 ID만 추출)
-    // 예: https://t.me/my_channel -> @my_channel
+    // 1. 입력값 정제
     let cleanId = channelId.trim();
     if (cleanId.includes("t.me/")) {
-      cleanId = cleanId.split("t.me/")[1].split("/")[0]; // URL에서 ID 추출
+      cleanId = cleanId.split("t.me/")[1].split("/")[0];
     }
-    cleanId = cleanId.replace("@", ""); // @ 제거
-    const chatId = `@${cleanId}`; // API 호출용으로 @ 다시 부착
+    cleanId = cleanId.replace("@", "");
+    const chatId = `@${cleanId}`;
 
-    // 2. [API 1] 채널 기본 정보 및 구독자 수 가져오기 (getChat)
+    // 2. [API 1] 채널 기본 정보 가져오기 (getChat)
     const chatRes = await fetch(
       `https://api.telegram.org/bot${botToken}/getChat?chat_id=${chatId}`
     );
@@ -51,14 +49,30 @@ export async function POST(request: Request) {
     );
     const memberData = await memberRes.json();
 
-    if (!memberData.ok || !["creator"].includes(memberData.result.status)) {
-      return NextResponse.json(
-        { success: false, message: "소유주 권한이 확인되지 않았습니다." },
-        { status: 403 }
-      );
+    if (
+      !memberData.ok ||
+      !["creator", "administrator"].includes(memberData.result.status)
+    ) {
+      // creator만 허용할지 administrator도 허용할지 정책에 따라 수정 (보통 creator 권장)
+      if (memberData.result.status !== "creator") {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "소유주(Creator) 권한이 확인되지 않았습니다.",
+          },
+          { status: 403 }
+        );
+      }
     }
 
-    // 4. [API 3] 프로필 사진 가져오기 (있다면)
+    // 4. [API 3] 구독자 수 가져오기 (getChatMemberCount) - [추가됨]
+    const countRes = await fetch(
+      `https://api.telegram.org/bot${botToken}/getChatMemberCount?chat_id=${chatId}`
+    );
+    const countData = await countRes.json();
+    const subscriberCount = countData.ok ? countData.result : 0;
+
+    // 5. [API 4] 프로필 사진 가져오기 (있다면)
     let photoUrl = null;
     if (chatData.result.photo?.big_file_id) {
       const fileRes = await fetch(
@@ -66,20 +80,19 @@ export async function POST(request: Request) {
       );
       const fileData = await fileRes.json();
       if (fileData.ok) {
-        // 텔레그램 파일 경로를 실제 URL로 변환
         photoUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
       }
     }
 
-    // 5. 성공 결과 리턴 (구독자 수, 제목, 이미지 포함)
+    // 6. 성공 결과 리턴
     return NextResponse.json({
       success: true,
       role: memberData.result.status,
       channel: {
-        id: cleanId, // @ 뺀 순수 ID
-        title: chatData.result.title, // 채널명
-        subscribers: chatData.result.count, // 구독자 수 (봇이 권한 있어야 보일 수 있음)
-        photoUrl: photoUrl, // 프로필 이미지 URL
+        id: cleanId,
+        title: chatData.result.title,
+        subscribers: subscriberCount, // [수정됨] 별도 API로 가져온 카운트 사용
+        photoUrl: photoUrl,
         url: `https://t.me/${cleanId}`,
       },
     });
