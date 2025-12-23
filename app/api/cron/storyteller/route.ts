@@ -29,10 +29,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Env missing" }, { status: 500 });
   }
 
-  // [날짜 설정] UTC 15:00 실행 시 -> 한국은 다음날 00:00
-  // new Date()는 UTC 기준이므로 '어제 날짜(마감된 날짜)'로 찍힙니다.
-  // 예: 한국 26일 00시 실행 -> 파일명: 2025-XX-25.json (25일자 마감 데이터라는 의미로 적절함)
-  const today = new Date().toISOString().split("T")[0];
+  // [날짜 설정 수정] KST 기준 "어제" 날짜를 파일명으로 사용
+  // UTC 15:00 실행(한국 00:00) -> 한국 기준 어제 날짜로 저장해야 함
+  // 예: 한국 26일 00시 실행 -> 25일자 데이터로 저장
+
+  // 1. 한국 시간 기준 현재 날짜(YYYY-MM-DD) 구하기
+  const kstTodayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  // 2. Date 객체로 변환 후 하루 빼기
+  const targetDate = new Date(kstTodayStr);
+  targetDate.setDate(targetDate.getDate() - 1);
+  const today = targetDate.toISOString().split("T")[0]; // 최종 파일명 (YYYY-MM-DD)
+
+  console.log(`--> Saving data for date: ${today} (KST Yesterday)`);
 
   const headers = {
     Authorization: `Bearer ${NOTION_TOKEN}`,
@@ -113,12 +127,10 @@ export async function GET(request: Request) {
 
       if (groupId) {
         try {
-          // [핵심 변경] 7, 14, 30, 90일 데이터를 병렬로 모두 가져옴
           const collectedData: Record<string, any> = {};
 
           await Promise.all(
             LOOKBACK_DAYS.map(async (days) => {
-              // 50개 데이터 기준
               const apiUrl = `${API_BASE_URL}/${groupId}/timeseries-group?limit=50&lookbacks=${days}`;
               const res = await fetch(apiUrl);
               if (res.ok) {
@@ -127,16 +139,14 @@ export async function GET(request: Request) {
             })
           );
 
-          // 데이터가 하나라도 수집되었다면 저장
           if (Object.keys(collectedData).length > 0) {
             const filename = `history/${groupId}/${today}.json`;
 
-            // 하나의 JSON 파일 안에 {"7":..., "14":..., "30":..., "90":...} 형태로 저장됨
             const blob = await put(filename, JSON.stringify(collectedData), {
               access: "public",
               contentType: "application/json",
               addRandomSuffix: false,
-              allowOverwrite: true, // 덮어쓰기 허용
+              allowOverwrite: true,
             });
 
             console.log(

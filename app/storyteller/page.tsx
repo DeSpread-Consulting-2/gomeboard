@@ -231,10 +231,18 @@ export default async function StorytellerPage() {
   // 3. API 데이터 가져오기
   const apiDataMap = await fetchAllApiData(uniqueGroupIds);
 
-  // 4. [Fix] Hydration Error 방지를 위한 서버 시간 고정
+  // 4. [Fix] Hydration Error 및 날짜 롤오버 문제 해결
   const now = new Date();
-  const initialNow = now.getTime(); // 클라이언트로 전달할 타임스탬프
-  const initialTodayStr = now.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  const initialNow = now.getTime(); // 클라이언트로 전달할 타임스탬프 (UTC 기준이어도 상관없음)
+
+  // [수정] 서버 시간을 한국 시간(KST)으로 변환하여 "오늘 날짜" 문자열 생성
+  // 이렇게 해야 한국 시간 00:00이 지났을 때 앱에서도 날짜가 바뀜
+  const initialTodayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now); // 결과: "YYYY-MM-DD"
 
   return (
     <StorytellerClient
