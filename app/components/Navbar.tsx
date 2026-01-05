@@ -13,7 +13,10 @@ export default function Navbar() {
   const role = useUserRole();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // 메뉴 리스트
+  // [추가] 드롭다운 상태 관리
+  const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
+
+  // 메뉴 리스트 구조 변경 (children 속성 추가)
   const navLinks = [
     { name: "Overview", path: "/", allowed: ["internal"] },
     { name: "Projects", path: "/projects", allowed: ["internal"] },
@@ -21,9 +24,21 @@ export default function Navbar() {
     { name: "PM Guide", path: "/pm-guide", allowed: ["internal"] },
     { name: "Metabase", path: "/metabase", allowed: ["internal"] },
     {
-      name: "Storyteller",
-      path: "/storyteller",
-      allowed: ["internal", "external"],
+      name: "Mindshare", // 이름 변경
+      path: "/storyteller", // 기본 경로는 스토리텔러로 유지하거나 /mindshare/storyteller 등 조정
+      allowed: ["internal"],
+      children: [
+        {
+          name: "Storyteller",
+          path: "/storyteller",
+          description: "Influence Intelligence",
+        },
+        {
+          name: "Kimchi Map",
+          path: "/kimchimap",
+          description: "Community Mindshare",
+        },
+      ],
     },
   ];
 
@@ -87,15 +102,39 @@ export default function Navbar() {
         </Link>
 
         {/* 데스크탑 메뉴 */}
-        <div className="hidden md:flex items-center gap-8 text-sm font-medium">
+        <div className="hidden md:flex items-center gap-1 text-sm font-medium h-full">
           {visibleLinks.map((link) => (
-            <Link
-              key={link.path}
-              href={link.path}
-              className={getNavLinkClass(link.path)}
+            <div
+              key={link.name}
+              className="relative h-full flex items-center"
+              onMouseEnter={() => setHoveredMenu(link.name)}
             >
-              {link.name}
-            </Link>
+              {link.children ? (
+                // 드롭다운이 있는 메뉴 (Mindshare)
+                <button
+                  className={`px-4 py-2 transition-colors ${
+                    pathname.startsWith(link.path) ||
+                    link.children.some((c) => pathname === c.path)
+                      ? "text-black font-bold"
+                      : "text-gray-500 hover:text-black"
+                  }`}
+                >
+                  {link.name}
+                </button>
+              ) : (
+                // 일반 링크
+                <Link
+                  href={link.path}
+                  className={`px-4 py-2 transition-colors ${
+                    pathname === link.path
+                      ? "text-black font-bold"
+                      : "text-gray-500 hover:text-black"
+                  }`}
+                >
+                  {link.name}
+                </Link>
+              )}
+            </div>
           ))}
         </div>
 
@@ -186,30 +225,116 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* 모바일 메뉴 */}
+      {/* [추가] 애플 스타일 드롭다운 메뉴 */}
+      {/* Mindshare 메뉴에 호버 시 전체 너비 패널이 부드럽게 내려오도록 구현 */}
+      <div
+        className={`absolute top-14 left-0 w-full bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-lg overflow-hidden transition-all duration-300 ease-in-out z-10 ${
+          hoveredMenu === "Mindshare"
+            ? "max-h-64 opacity-100 visible"
+            : "max-h-0 opacity-0 invisible"
+        }`}
+        onMouseEnter={() => setHoveredMenu("Mindshare")}
+        onMouseLeave={() => setHoveredMenu(null)}
+      >
+        <div className="max-w-[1000px] mx-auto py-8 px-6 grid grid-cols-2 gap-12">
+          <div className="col-span-1">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
+              Analytics
+            </h3>
+            <div className="flex flex-col gap-2">
+              {navLinks
+                .find((l) => l.name === "Mindshare")
+                ?.children?.map((sub) => (
+                  <Link
+                    key={sub.path}
+                    href={sub.path}
+                    onClick={() => setHoveredMenu(null)}
+                    className="group flex items-start gap-4 p-3 rounded-xl hover:bg-gray-50 transition-all"
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                        sub.name === "Storyteller"
+                          ? "bg-blue-100 text-blue-600"
+                          : "bg-orange-100 text-orange-600"
+                      }`}
+                    >
+                      {/* 간단한 아이콘 */}
+                      {sub.name === "Storyteller" ? "📊" : "🌶️"}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-[#0037F0]">
+                        {sub.name}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {sub.description}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+            </div>
+          </div>
+          <div className="col-span-1 border-l border-gray-100 pl-8">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
+              Latest Insights
+            </h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Check out the latest community trends and mindshare analysis
+              across various crypto sectors.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 모바일 메뉴 Drawer */}
       {isMenuOpen && (
-        <div className="md:hidden absolute top-14 left-0 w-full bg-white border-b border-gray-200 shadow-lg px-6 py-4 flex flex-col gap-2">
+        <div className="md:hidden absolute top-14 left-0 w-full bg-white border-b border-gray-200 shadow-xl px-6 py-6 flex flex-col gap-1 z-50 animate-in slide-in-from-top-2">
           {visibleLinks.map((link) => (
-            <Link
-              key={link.path}
-              href={link.path}
-              className={getNavLinkClass(link.path)}
-              onClick={() => setIsMenuOpen(false)}
-            >
-              {link.name}
-            </Link>
+            <div key={link.name}>
+              {link.children ? (
+                // 하위 메뉴가 있는 경우 (Mindshare)
+                <div className="py-2">
+                  <div className="text-gray-900 font-bold text-sm mb-2">
+                    {link.name}
+                  </div>
+                  <div className="flex flex-col gap-1 pl-4 border-l-2 border-gray-100 ml-1">
+                    {link.children.map((child) => (
+                      <Link
+                        key={child.path}
+                        href={child.path}
+                        onClick={() => setIsMenuOpen(false)}
+                        className="py-2 text-gray-500 hover:text-[#0037F0] text-sm font-medium flex items-center gap-2"
+                      >
+                        {child.name}
+                        {child.name === "Kimchi Map" && (
+                          <span className="text-[9px] bg-red-100 text-red-600 px-1.5 rounded-full font-bold">
+                            HOT
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // 일반 메뉴
+                <Link
+                  href={link.path}
+                  className={getNavLinkClass(link.path)}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {link.name}
+                </Link>
+              )}
+            </div>
           ))}
-          {/* 모바일에서 마이페이지 링크 추가 */}
-          <hr className="my-2 border-gray-100" />
+
+          <hr className="my-3 border-gray-100" />
+
           <Link
             href="/mypage"
-            className="text-gray-500 py-2 font-medium flex items-center gap-2"
+            className="text-gray-500 py-2 font-medium flex items-center gap-2 text-sm"
             onClick={() => setIsMenuOpen(false)}
           >
             <span>⚙️ Account Settings</span>
-            {!user?.telegram && (
-              <span className="w-2 h-2 rounded-full bg-orange-500" />
-            )}
           </Link>
         </div>
       )}
