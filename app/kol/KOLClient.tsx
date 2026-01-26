@@ -357,7 +357,7 @@ export default function KOLClient({
               disabled={currentPage === 1}
               className="px-3 py-1 border rounded disabled:opacity-30 hover:bg-gray-50"
             >
-              &lt; Prev
+              &lt; 이전
             </button>
             <span className="text-sm text-gray-600 mx-2">
               Page <b>{currentPage}</b> of {totalPages}
